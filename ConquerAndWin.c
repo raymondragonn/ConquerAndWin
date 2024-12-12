@@ -29,10 +29,17 @@ bool AxisNumbers = false;
 
 bool palmsGenerated = false;
 
-bool showChest = false; // Bandera para indicar si se muestra el cofre
-
 float treasureChestX = -1.0f, treasureChestY = -1.0f; // Invalid position initially
 bool treasureChestGenerated = false;  // Flag to track if the chest has been generated
+bool showChest = false; // Bandera para indicar si se muestra el cofre
+
+float grapeInitX = -1.0f, grapeInitY = -1.0f;
+bool grapeGenerated = false;
+bool showGrape = false;
+
+float necklaceX = -1.0f, necklaceY = -1.0f;
+bool necklaceGenerated = false;
+bool showNecklace = false;
 
 typedef struct {
     float r, g, b;
@@ -92,10 +99,16 @@ typedef struct {
 
 Pirate pirate = { 1000, 0.12f, 500, 80, 0, -1, 1.0f, 1.0f, 0.0f, 0.0f };
 
+typedef enum {
+    ITEM_CHEST,
+    ITEM_GRAPE,
+    ITEM_NECKLACE
+} ItemType;
 struct elemento
 {
     int id;
-    int count = 0;
+    int count;
+    ItemType type;
 };
 typedef struct nodo
 {
@@ -108,9 +121,14 @@ int c = 1; // Contador para establecer ID dentro de Lista
 
 // Inventario
 Nodo* crearNodo(int count);
-void insertarNodo(Nodo** Lista, int count);
+void insertarNodo(Nodo** Lista, int id, ItemType type);
 
 // Dibujado de objetos
+bool checkNecklaceCollision(float pirateX, float pirateY);
+void generateGoldNecklace(float* necklaceX, float* necklaceY);
+void drawGoldNecklace(float necklaceX, float necklaceY);
+bool checkGrapeCollision(float pirateX, float pirateY);
+void generateGrapes(float* grapeX, float* grapeY);
 void drawGrapes(float grapeX, float grapeY);
 void addPixel(float x, float y, float r, float g, float b);
 float randomVariation(float baseValue, float variation);
@@ -196,32 +214,59 @@ Nodo* crearNodo(int count)
     if (!nodo)
         return NULL;
     nodo->elem.id = count;
-    nodo->elem.count = nodo->elem.count++;
+    nodo->elem.count = 1;
     nodo->sgt = NULL;
     return nodo;
 }
 
-void insertarNodo(Nodo** Lista, int id) {
-    // Buscar si el nodo ya existe
-    Nodo* nodoExistente = buscarNodo(*Lista, id);
+void insertarNodo(Nodo** Lista, int id, ItemType type) {
+    // Verificar si ya existe un nodo con el mismo tipo
+    Nodo* current = *Lista;
 
-    if (nodoExistente) {
-        // Si el nodo ya existe, incrementar el contador
-        nodoExistente->elem.count++;
+    while (current) {
+        if (current->elem.type == type) {
+            // Actualizar el contador y banderas según el tipo
+            current->elem.count++;
+            if (type == ITEM_CHEST) {
+                showChest = true;
+            }
+            else if (type == ITEM_GRAPE) {
+                showGrape = true;
+            }
+            else if (type == ITEM_NECKLACE) {
+                showNecklace = true;
+            }
+            return; // Salir de la función
+        }
+        current = current->sgt; // Mover al siguiente nodo
     }
-    else {
-        // Si no existe, crear un nuevo nodo y agregarlo a la lista
-        Nodo* newNodo = (Nodo*)malloc(sizeof(Nodo));
-        if (!newNodo)
-            return;
-        newNodo->elem.id = id;
-        newNodo->elem.count = 1; // Inicializa el contador en 1
-        newNodo->sgt = *Lista;
-        *Lista = newNodo;
-        showChest = true;
 
+    // Si no existe un nodo con el mismo tipo, crear uno nuevo
+    Nodo* newNodo = (Nodo*)malloc(sizeof(Nodo));
+    if (!newNodo) {
+        fprintf(stderr, "Error: No se pudo asignar memoria para el nodo.\n");
+        return; // Manejo de error
+    }
+
+    // Inicializar el nuevo nodo
+    newNodo->elem.id = id;
+    newNodo->elem.count = 1;
+    newNodo->elem.type = type;
+    newNodo->sgt = *Lista; // Enlazar al inicio de la lista
+    *Lista = newNodo;      // Actualizar el puntero de la lista
+
+    // Actualizar banderas según el tipo del nuevo nodo
+    if (type == ITEM_CHEST) {
+        showChest = true;
+    }
+    else if (type == ITEM_GRAPE) {
+        showGrape = true;
+    }
+    else if (type == ITEM_NECKLACE) {
+        showNecklace = true;
     }
 }
+
 
 // Ventanas
 void display() {
@@ -325,14 +370,21 @@ void timer1(int value) {
             }
         }
 
-        // Comprobar colisión con el cofre
         if (checkChestCollision(pirate.x, pirate.y)) {
-            // Si el pirata recoge el cofre, se regenera en una nueva ubicación
             generateTreasureChest(&treasureChestX, &treasureChestY);
-            insertarNodo(&Inventory, c);
-            // Insertar Nodo en la lista enlazada
-            // Si ya está creada el Nodo Cofre solo incrementa el contador dentro de esa estructura
+            insertarNodo(&Inventory, c, ITEM_CHEST); // Inserta un cofre
         }
+
+        if (checkGrapeCollision(pirate.x, pirate.y)) {
+            generateGrapes(&grapeInitX, &grapeInitY);
+            insertarNodo(&Inventory, c, ITEM_GRAPE); // Inserta uvas
+        }
+
+        if (checkNecklaceCollision(pirate.x, pirate.y)) {
+            generateGoldNecklace(&necklaceX, &necklaceY);
+            insertarNodo(&Inventory, c, ITEM_NECKLACE);
+        }
+
     }
 
     if (gameStateChanged) {
@@ -383,6 +435,9 @@ void renderWindow1() {
         drawTreasureChest(treasureChestX, treasureChestY);
     }
 
+    drawGrapes(grapeInitX, grapeInitY);
+    drawGoldNecklace(necklaceX, necklaceY);
+
     glutSwapBuffers();
 }
 
@@ -397,7 +452,9 @@ void initWindow1() {
     glMatrixMode(GL_MODELVIEW);
 
     generatePalms();
+    generateGrapes(&grapeInitX, &grapeInitY);
     generateTreasureChest(&treasureChestX, &treasureChestY);
+    generateGoldNecklace(&necklaceX, &necklaceY);
     treasureChestGenerated = true;
 }
 
@@ -428,39 +485,81 @@ void timer2(int value) {
     glutTimerFunc(100, timer2, 0);  // Mantener la llamada recursiva
 }
 
+void drawItemWithCount(float x, float y, const char* itemName, int count) {
+    // Dibuja el objeto en la posición especificada
+    if (strcmp(itemName, "Chest") == 0) {
+        drawTreasureChest(x, y);
+    }
+    else if (strcmp(itemName, "Grape") == 0) {
+        drawGrapes(x, y);
+    }
+    else if (strcmp(itemName, "Necklace") == 0) {
+        drawGoldNecklace(x, y);
+    }
+
+    // Configura el color para el texto
+    glColor3f(1.0f, 1.0f, 1.0f);
+
+    // Prepara la posición del texto (ligeramente sobre el objeto)
+    glRasterPos2f(x + 0.4f, y + 0.15f);
+
+    // Convierte el conteo a cadena
+    char countText[10];  // Buffer para el texto
+    sprintf(countText, "%d", count);
+
+    // Renderiza cada carácter de la cadena
+    for (char* c = countText; *c != '\0'; c++) {
+        glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, *c);
+    }
+}
 
 void renderWindow2() {
     glClear(GL_COLOR_BUFFER_BIT);
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
 
-    drawGrid2();     // Dibuja la cuadrícula del minimapa
-    drawMiniMap();   // Dibuja el minimapa con el jugador en él
-    drawInventory();
-    drawMissions();
+    // Dibuja los elementos de la ventana
+    drawGrid2();      // Dibuja la cuadrícula del minimapa
+    drawMiniMap();    // Dibuja el minimapa con el jugador
+    drawInventory();  // Dibuja el inventario
+    drawMissions();   // Dibuja las misiones
 
+    // Dibuja los elementos específicos si están activos
     if (showChest) {
-        if (showChest) {
-            drawTreasureChest(1.4f, 7.2f);  // Dibuja el cofre en la posición especificada
-
-            glColor3f(1.0f, 1.0f, 1.0f);  // Color blanco para el texto
-
-            // Prepara la posición del texto
-            glRasterPos2f(1.8f, 7.35f);  // Posición ajustada del texto sobre el cofre
-
-            // Convierte Inventory->elem.count a cadena
-            char countText[10];  // Buffer para el texto (asume que el número tiene menos de 10 dígitos)
-            sprintf(countText, "%d", Inventory->elem.count);
-
-            // Renderiza cada carácter de la cadena
-            for (char* c = countText; *c != '\0'; c++) {
-                glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, *c);  // Usa fuente Helvetica de 12 puntos
-            }
+        // Busca el nodo del cofre en el inventario
+        Nodo* chestNode = Inventory;
+        while (chestNode && chestNode->elem.type != ITEM_CHEST) {
+            chestNode = chestNode->sgt;
+        }
+        if (chestNode) {
+            drawItemWithCount(1.4f, 7.2f, "Chest", chestNode->elem.count);
         }
     }
-    //drawSubGrid2();  // Dibuja el subgrid si es necesario
+
+    if (showGrape) {
+        // Busca el nodo de las uvas en el inventario
+        Nodo* grapeNode = Inventory;
+        while (grapeNode && grapeNode->elem.type != ITEM_GRAPE) {
+            grapeNode = grapeNode->sgt;
+        }
+        if (grapeNode) {
+            drawItemWithCount(2.8f, 7.2f, "Grape", grapeNode->elem.count);
+        }
+    }
+
+    if (showNecklace) {
+        Nodo* necklaceNode = Inventory;
+        while (necklaceNode && necklaceNode->elem.type != ITEM_NECKLACE) {
+            necklaceNode = necklaceNode->sgt;
+        }
+        if (necklaceNode) {
+            drawItemWithCount(4.5f, 7.2f, "Necklace", necklaceNode->elem.count);
+        }
+    }
+    // Intercambia los buffers para mostrar la ventana
     glutSwapBuffers();
 }
+
 
 void drawMissions() {
     // Variables de tamaño del minimapa
@@ -975,6 +1074,74 @@ void adjustCameraToFollowPirate() {
     gluOrtho2D(orthoLeft, orthoRight, orthoBottom, orthoTop);
 }
 
+void generateGoldNecklace(float* necklaceX, float* necklaceY) {
+    float x, y;
+    do {
+        // Generar una posición aleatoria entre 0 y 10 para X e Y
+        x = ((float)rand() / RAND_MAX) * 10.0f; // Generar una posición aleatoria en el rango [0, 10] para X
+        y = ((float)rand() / RAND_MAX) * 10.0f; // Generar una posición aleatoria en el rango [0, 10] para Y
+    } while (isInRestrictedRange(x, y));  // Verificar que la posición no esté dentro de un área restringida
+
+    // Asignar las coordenadas válidas al collar
+    *necklaceX = x;  // Asignar la posición de X al collar
+    *necklaceY = y;  // Asignar la posición de Y al collar
+}
+
+
+void drawGoldNecklace(float necklaceX, float necklaceY) {
+    // Color dorado para el collar
+    glColor3f(0.85f, 0.65f, 0.12f);
+
+    // Parámetros para un collar ovalado más pequeño
+    float radiusX = 0.2f;  // Radio horizontal aún más corto
+    float radiusY = 0.1f;  // Radio vertical aún más corto
+
+    // Dibujar el contorno ovalado del collar
+    glLineWidth(2.0f);
+    glBegin(GL_LINE_LOOP);
+    for (int i = 0; i < 360; i += 5) {
+        float angle = i * M_PI / 180.0f;
+        float x = radiusX * cos(angle);
+        float y = radiusY * sin(angle);
+        glVertex3f(necklaceX + x, necklaceY + y, 0.0f);
+    }
+    glEnd();
+
+    // Dibujar la cruz colgando del collar (ajustada proporcionalmente)
+    glLineWidth(1.5f);
+
+    // Punto de unión de la cruz (colgando del collar)
+    float crossAttachX = necklaceX;
+    float crossAttachY = necklaceY - radiusY;
+
+    // Línea vertical de la cruz (más corta)
+    glBegin(GL_LINES);
+    glVertex3f(crossAttachX, crossAttachY, 0.0f);
+    glVertex3f(crossAttachX, crossAttachY - 0.1f, 0.0f);
+    glEnd();
+
+    // Línea horizontal de la cruz (más estrecha)
+    glBegin(GL_LINES);
+    glVertex3f(crossAttachX - 0.05f, crossAttachY - 0.05f, 0.0f);
+    glVertex3f(crossAttachX + 0.05f, crossAttachY - 0.05f, 0.0f);
+    glEnd();
+}
+
+
+
+void generateGrapes(float* grapeX, float* grapeY) {
+    float x, y;
+    do {
+        // Generar una posición aleatoria entre 0 y 10 para X e Y
+        x = ((float)rand() / RAND_MAX) * 10.0f;
+        y = ((float)rand() / RAND_MAX) * 10.0f;
+    } while (isInRestrictedRange(x, y));  // Verificar que la posición no esté dentro de un área restringida
+
+    // Asignar las coordenadas válidas al cofre
+    *grapeX = x;
+    *grapeY = y;
+}
+
 // Dibujado de objetos
 void drawGrapes(float grapeX, float grapeY) {
     // *** Uva 1 ***
@@ -1149,6 +1316,21 @@ bool checkChestCollision(float pirateX, float pirateY) {
     float distance = sqrt(pow(pirateX - treasureChestX, 2) + pow(pirateY - treasureChestY, 2));
 
     return distance < chestRadius;  // Retorna verdadero si el pirata está cerca del cofre
+}
+
+bool checkGrapeCollision(float pirateX, float pirateY) {
+    float grapeRadius = 0.4f;  // Radio del cofre (la mitad del tamaño de la base)
+    float distance = sqrt(pow(pirateX - grapeInitX, 2) + pow(pirateY - grapeInitY, 2));
+
+    return distance < grapeRadius;  // Retorna verdadero si el pirata está cerca del cofre
+}
+
+
+bool checkNecklaceCollision(float pirateX, float pirateY) {
+    float necklaceRadius = 0.5f;  // Radio del cofre (la mitad del tamaño de la base)
+    float distance = sqrt(pow(pirateX - necklaceX, 2) + pow(pirateY - necklaceY, 2));
+
+    return distance < necklaceRadius;  // Retorna verdadero si el pirata está cerca del cofre
 }
 
 void drawTreasureChest(float chestX, float chestY) {
