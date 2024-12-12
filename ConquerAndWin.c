@@ -2,14 +2,11 @@
 #include <GL/freeglut.h>
 #include <GL/gl.h>
 #include <GL/glu.h>
-#define STB_IMAGE_IMPLEMENTATION
-#include "stb_image.h"
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
 #include <time.h>
-GLuint textura;
 
 #define GRID_SIZE 300
 #define CELL_SIZE (10.0f / GRID_SIZE)
@@ -199,10 +196,6 @@ void keyboard(unsigned char key, int x, int y);
 void timer2(int value);
 void renderWindow2();
 void createWindow2();
-
-// Texturas
-GLuint cargarTextura(const char* archivo);
-
 
 int main(int argc, char** argv) {
     glutInit(&argc, argv);
