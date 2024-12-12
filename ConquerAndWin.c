@@ -9,8 +9,6 @@
 #include <time.h>
 
 #define GRID_SIZE 300
-#define CELL_SIZE (10.0f / GRID_SIZE)
-#define MAX_PIXELS 10000
 #define MAX_PALMS 1000
 #define DIRECTION_NONE -1
 
@@ -118,6 +116,30 @@ typedef struct nodo
 Nodo* Inventory = NULL;
 int c = 1; // Contador para establecer ID dentro de Lista
 
+// Estructura para representar una misión
+typedef struct {
+    char nombre[50];
+    char descripcion[200];
+} Mision;
+
+// Estructura de la pila
+typedef struct {
+    Mision* misiones;  // Puntero a un arreglo de misiones
+    int tope;          // Índice del último elemento en la pila
+    int capacidad;     // Capacidad máxima de la pila
+} Pila;
+
+Pila pilaMisiones;
+
+// Misiones
+void inicializarPila(Pila* pila, int capacidadInicial);
+int estaVacia(Pila* pila);
+void expandirPila(Pila* pila);
+void agregarMision(Pila* pila, Mision mision);
+Mision eliminarMision(Pila* pila);
+Mision verMisionSuperior(Pila* pila);
+void liberarPila(Pila* pila);
+
 // Inventario
 Nodo* crearNodo(int count);
 void insertarNodo(Nodo** Lista, int id, ItemType type);
@@ -200,6 +222,15 @@ void createWindow2();
 int main(int argc, char** argv) {
     glutInit(&argc, argv);
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB);
+
+    inicializarPila(&pilaMisiones, 3);
+    Mision m1 = { "Mision 1", "Agarra 4 uvas" };
+    Mision m2 = { "Mision 2", "Encuentra 2 collares" };
+    Mision m3 = { "Mision 3", "Consigue 15 cofres" };
+
+    agregarMision(&pilaMisiones, m1);
+    agregarMision(&pilaMisiones, m2);
+    agregarMision(&pilaMisiones, m3);
 
     createMenuWindow();  // Crear la ventana del menú
     glutTimerFunc(16, timer0, 0);
@@ -729,7 +760,8 @@ void drawItemWithCount(float x, float y, const char* itemName, int count) {
     }
 }
 
-void drawMissions() {
+// Función para dibujar las misiones
+void drawMissions(Pila* pila) {
     // Variables de tamaño del minimapa
     float gridCols = 10;  // Número de columnas
     float gridRows = 23.33;  // Número de filas
@@ -773,11 +805,11 @@ void drawMissions() {
         glutBitmapCharacter(GLUT_BITMAP_HELVETICA_12, *c);  // Renderiza cada caracter
     }
 
-    int numMissions = 3;
+    int numMissions = pila->tope + 1;  // Número de misiones en la pila
     int numColumns = 1;
 
     float missionWidth = (x3Pos - x1Pos) / numColumns;  // Ancho de cada misión
-    float missionHeight = (y3Pos - y1Pos) / 3;  // Altura de cada misión (dividido en 3 filas)
+    float missionHeight = (y3Pos - y1Pos) / (float)(numMissions);  // Altura de cada misión
 
     // Dibujar las misiones con colores personalizados para cada fila
     for (int i = 0; i < numMissions; i++) {
@@ -790,6 +822,7 @@ void drawMissions() {
         float missionY1 = y1Pos + row * missionHeight;  // Posición Y de la misión
         float missionY2 = missionY1 + missionHeight;  // Posición Y final de la misión
 
+        // Dibujar fondo de la misión
         if (row == 0 || row == 1) {
             glColor3f(0.95f, 0.95f, 0.95f);  // Fila 1 y 2: color #F4F4F4
         }
@@ -797,8 +830,6 @@ void drawMissions() {
             glColor3f(0.98f, 0.98f, 0.98f);  // Fila 3: color #F9F9F9
         }
 
-
-        // Dibujar fondo de la misión
         glBegin(GL_QUADS);
         glVertex2f(missionX1, missionY1);
         glVertex2f(missionX2, missionY1);
@@ -815,6 +846,15 @@ void drawMissions() {
         glVertex2f(missionX2, missionY2);
         glVertex2f(missionX1, missionY2);
         glEnd();
+
+        // Mostrar la descripción de la misión en la fila correspondiente
+        Mision misionActual = pila->misiones[i];
+
+        glColor3f(0.0f, 0.0f, 0.0f);  // Color negro para el texto
+        glRasterPos2f(missionX1 + 0.1f, missionY1 + 0.1f);  // Posición de inicio del texto
+        for (const char* c = misionActual.descripcion; *c != '\0'; c++) {
+            glutBitmapCharacter(GLUT_BITMAP_HELVETICA_12, *c);  // Renderiza cada caracter
+        }
     }
 }
 
@@ -896,6 +936,106 @@ void drawInventory() {
         glVertex2f(itemX2, itemY2);
         glVertex2f(itemX1, itemY2);
         glEnd();
+    }
+}
+
+// Función para dibujar las misiones
+void drawMissions() {
+    // Variables de tamaño del minimapa
+    float gridCols = 10;  // Número de columnas
+    float gridRows = 23.33;  // Número de filas
+    float colWidth = 6.0f / gridCols;  // Ancho de cada celda en X
+    float rowHeight = 14.0f / gridRows;  // Altura de cada celda en Y
+
+    // Definir los límites del área de las misiones
+    float x1Pos = 1 * colWidth;
+    float y1Pos = 1 * rowHeight;
+    float x2Pos = 9 * colWidth;
+    float y2Pos = 1 * rowHeight;
+    float x3Pos = 9 * colWidth;
+    float y3Pos = 8 * rowHeight;
+    float x4Pos = 1 * colWidth;
+    float y4Pos = 8 * rowHeight;
+
+    // Dibujar el fondo del área de misiones como un pergamino
+    glColor3f(0.9f, 0.8f, 0.6f);  // Color sepia claro
+    glBegin(GL_QUADS);
+    glVertex2f(x1Pos, y1Pos);
+    glVertex2f(x2Pos, y2Pos);
+    glVertex2f(x3Pos, y3Pos);
+    glVertex2f(x4Pos, y4Pos);
+    glEnd();
+
+    // Agregar un borde decorativo oscuro
+    glColor3f(0.6f, 0.4f, 0.2f);  // Color marrón oscuro
+    glLineWidth(3.0f);  // Grosor de línea
+    glBegin(GL_LINE_LOOP);
+    glVertex2f(x1Pos, y1Pos);
+    glVertex2f(x2Pos, y2Pos);
+    glVertex2f(x3Pos, y3Pos);
+    glVertex2f(x4Pos, y4Pos);
+    glEnd();
+
+    // Dibujar texto "MISSIONS" en la esquina superior izquierda del área
+    glColor3f(1.0f, 1.0f, 1.0f);  // Color blanco
+    glRasterPos2f(x1Pos, y4Pos + 0.1f);  // Posición del texto
+    const char* text = "MISSIONS";
+    for (const char* c = text; *c != '\0'; c++) {
+        glutBitmapCharacter(GLUT_BITMAP_HELVETICA_12, *c);  // Renderiza cada caracter
+    }
+
+    int numMissions = pilaMisiones.tope + 1;  // Número de misiones en la pila
+    int numColumns = 1;
+
+    float missionWidth = (x3Pos - x1Pos) / numColumns;  // Ancho de cada misión
+    float missionHeight = (y3Pos - y1Pos) / (float)(numMissions);  // Altura de cada misión
+
+    // Dibujar las misiones con colores personalizados para cada fila
+    for (int i = 0; i < numMissions; i++) {
+        int row = i / numColumns;  // Determinar la fila (0, 1, 2)
+        int col = i % numColumns;  // Determinar la columna (0, 1)
+
+        // Calcular la posición de cada misión (cambiar el cálculo de 'y')
+        float missionX1 = x1Pos + col * missionWidth;  // Posición X de la misión
+        float missionX2 = missionX1 + missionWidth;  // Posición X final de la misión
+
+        // Aquí es donde calculamos la posición correcta para Y
+        float missionY1 = y1Pos + (numMissions - 1 - i) * missionHeight;  // Posición Y de la misión (empieza desde abajo)
+        float missionY2 = missionY1 + missionHeight;  // Posición Y final de la misión
+
+        // Dibujar fondo de la misión
+        if (row == 0 || row == 1) {
+            glColor3f(0.95f, 0.95f, 0.95f);  // Fila 1 y 2: color #F4F4F4
+        }
+        else if (row == 2) {
+            glColor3f(0.98f, 0.98f, 0.98f);  // Fila 3: color #F9F9F9
+        }
+
+        glBegin(GL_QUADS);
+        glVertex2f(missionX1, missionY1);
+        glVertex2f(missionX2, missionY1);
+        glVertex2f(missionX2, missionY2);
+        glVertex2f(missionX1, missionY2);
+        glEnd();
+
+        // Borde de cada misión
+        glColor3f(0.6f, 0.4f, 0.2f);  // Color marrón oscuro
+        glLineWidth(2.0f);  // Grosor de línea
+        glBegin(GL_LINE_LOOP);
+        glVertex2f(missionX1, missionY1);
+        glVertex2f(missionX2, missionY1);
+        glVertex2f(missionX2, missionY2);
+        glVertex2f(missionX1, missionY2);
+        glEnd();
+
+        // Mostrar la descripción de la misión en la fila correspondiente
+        Mision misionActual = pilaMisiones.misiones[i];
+
+        glColor3f(0.0f, 0.0f, 0.0f);  // Color negro para el texto
+        glRasterPos2f(missionX1 + 0.1f, missionY1 + 0.1f);  // Posición de inicio del texto
+        for (const char* c = misionActual.descripcion; *c != '\0'; c++) {
+            glutBitmapCharacter(GLUT_BITMAP_HELVETICA_12, *c);  // Renderiza cada caracter
+        }
     }
 }
 
@@ -1630,4 +1770,61 @@ bool checkNecklaceCollision(float pirateX, float pirateY) {
     float distance = sqrt(pow(pirateX - necklaceX, 2) + pow(pirateY - necklaceY, 2));
 
     return distance < necklaceRadius;  // Retorna verdadero si el pirata está cerca del cofre
+}
+
+// Misiones
+// Función para inicializar la pila
+void inicializarPila(Pila* pila, int capacidadInicial) {
+    pila->misiones = (Mision*)malloc(sizeof(Mision) * capacidadInicial);
+    if (pila->misiones == NULL) {
+        exit(1);
+    }
+    pila->tope = -1;
+    pila->capacidad = capacidadInicial;
+}
+
+// Función para verificar si la pila está vacía
+int estaVacia(Pila* pila) {
+    return pila->tope == -1;
+}
+
+// Función para expandir la pila cuando se alcanza la capacidad máxima
+void expandirPila(Pila* pila) {
+    pila->capacidad *= 2;  // Doblamos la capacidad
+    pila->misiones = (Mision*)realloc(pila->misiones, sizeof(Mision) * pila->capacidad);
+    if (pila->misiones == NULL) {
+        exit(1);
+    }
+}
+
+// Función para agregar una misión a la pila
+void agregarMision(Pila* pila, Mision mision) {
+    // Si la pila está llena, expandimos su capacidad
+    if (pila->tope == pila->capacidad - 1) {
+        expandirPila(pila);
+    }
+
+    pila->tope++;
+    pila->misiones[pila->tope] = mision;
+}
+
+// Función para eliminar una misión de la pila
+Mision eliminarMision(Pila* pila) {
+    if (estaVacia(pila)) {
+        exit(1);
+    }
+    return pila->misiones[pila->tope--];
+}
+
+// Función para ver la misión en la parte superior de la pila sin eliminarla
+Mision verMisionSuperior(Pila* pila) {
+    if (estaVacia(pila)) {
+        exit(1);
+    }
+    return pila->misiones[pila->tope];
+}
+
+// Función para liberar la memoria de la pila
+void liberarPila(Pila* pila) {
+    free(pila->misiones);
 }
