@@ -17,7 +17,9 @@ GLuint textura;
 #define MAX_PALMS 1000
 #define DIRECTION_NONE -1
 
-int window1, window2;
+int selectedOption = 0;  // 0: Nuevo Juego, 1: Cargar Juego, 2: Salir
+int gameStarted = 0;  // Variable para determinar si el juego ha comenzado
+int window0, window1, window2;
 bool gameStateChanged = false;
 
 float zoomLevel = 1.0f; // Nivel de zoom (1.0 es el predeterminado)
@@ -29,8 +31,8 @@ bool AxisNumbers = false;
 
 bool palmsGenerated = false;
 
-float treasureChestX = -1.0f, treasureChestY = -1.0f; // Invalid position initially
-bool treasureChestGenerated = false;  // Flag to track if the chest has been generated
+float treasureChestX = -1.0f, treasureChestY = -1.0f; // Posición inicial de carga (Inválida)
+bool treasureChestGenerated = false;  // Bandera para creación de Cofre
 bool showChest = false; // Bandera para indicar si se muestra el cofre
 
 float grapeInitX = -1.0f, grapeInitY = -1.0f;
@@ -124,22 +126,29 @@ Nodo* crearNodo(int count);
 void insertarNodo(Nodo** Lista, int id, ItemType type);
 
 // Dibujado de objetos
-bool checkNecklaceCollision(float pirateX, float pirateY);
 void generateGoldNecklace(float* necklaceX, float* necklaceY);
 void drawGoldNecklace(float necklaceX, float necklaceY);
-bool checkGrapeCollision(float pirateX, float pirateY);
+
 void generateGrapes(float* grapeX, float* grapeY);
 void drawGrapes(float grapeX, float grapeY);
+
+void generateTreasureChest(float* chestX, float* chestY);
+void drawTreasureChest(float chestX, float chestY);
+
+void drawPirate();
+
 void addPixel(float x, float y, float r, float g, float b);
 float randomVariation(float baseValue, float variation);
 void createPalm(float x, float y, Palm* palm);
 void generatePalms();
 void renderPalms();
-void drawPirate();
-bool checkChestCollision(float pirateX, float pirateY);
-void generateTreasureChest(float* chestX, float* chestY);
-void drawTreasureChest(float chestX, float chestY);
 void printPalmPositions();
+
+
+// Colisiones de objetos
+bool checkNecklaceCollision(float pirateX, float pirateY);
+bool checkGrapeCollision(float pirateX, float pirateY);
+bool checkChestCollision(float pirateX, float pirateY);
 
 // Funcionalidades del jugador
 int isInRestrictedRange(float x, float y);
@@ -156,45 +165,202 @@ void drawSubGrid();
 void drawGrid();
 void drawAxisNumbers();
 
+// Minimapa, inventario y misiones en Ventana 2
 void drawSubGrid2();
 void drawGrid2();
 void drawMiniMap();
 void drawInventory();
 void drawMissions();
+void drawItemWithCount(float x, float y, const char* itemName, int count);
 
 // Ventanas
 void reshapeWindow(int w, int h);
-void createWindow1();
-void renderWindow1();
-void initWindow1();
 
-void createWindow2();
-void renderWindow2();
+// Menú principal
+void drawMenu();
+void menuKeyboard(unsigned char key, int x, int y);
+void renderText(const char* text, float x, float y, void* font);
+void drawTitle(const char* title, float x, float y);
+void drawPirateBackground();
+void drawSelectionIndicator(float x, float y);
+void drawMenu();
+void timer0(int value);
+void initMenuWindow();
+void createMenuWindow();
 
+// Ventana 1 (Juego)
 void timer1(int value);
-void timer2(int value);
+void renderWindow1();
+void createWindow1();
+void initWindow1();
 void keyboard(unsigned char key, int x, int y);
-void display();
+
+// Ventana 2 (Minimapa y misiones)
+void timer2(int value);
+void renderWindow2();
+void createWindow2();
 
 // Texturas
 GLuint cargarTextura(const char* archivo);
 
-int main(int argc, char** argv) {
 
+int main(int argc, char** argv) {
     glutInit(&argc, argv);
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB);
 
-    createWindow1();
-    createWindow2();
-
-    glutTimerFunc(16, timer1, 0);
-    glutTimerFunc(100, timer2, 0);
-    glutDisplayFunc(display);
-
-    glEnable(GL_TEXTURE_2D);
-    glBindTexture(GL_TEXTURE_2D, textura);
-    glutMainLoop();
+    createMenuWindow();  // Crear la ventana del menú
+    glutTimerFunc(16, timer0, 0);
+    glutMainLoop();  // Bucle principal de GLUT
     return 0;
+}
+
+void timer0(int value) {
+    glutPostRedisplay();
+    glutTimerFunc(16, timer0, 0);
+}
+
+void renderText(const char* text, float x, float y, void* font) {
+    glRasterPos2f(x, y);
+    for (int i = 0; i < strlen(text); i++) {
+        glutBitmapCharacter(font, text[i]);
+    }
+}
+
+// Dibujar un título
+void drawTitle(const char* title, float x, float y) {
+    glColor3f(0.2f, 0.1f, 0.0f);  // Sombra más oscura
+    renderText(title, x + 0.01f, y - 0.01f, GLUT_BITMAP_TIMES_ROMAN_24);
+
+    glColor3f(0.5f, 0.3f, 0.15f);  // Color de madera envejecida
+    renderText(title, x, y, GLUT_BITMAP_TIMES_ROMAN_24);
+}
+
+void drawPirateBackground() {
+    glBegin(GL_QUADS);
+    // Degradado
+    glColor3f(0.63f, 0.32f, 0.18f);
+    glVertex2f(-1.0f, 1.0f);
+    glVertex2f(1.0f, 1.0f);
+
+    glColor3f(0.5f, 0.3f, 0.15f);  // Tono más oscuro
+    glVertex2f(1.0f, -1.0f);
+    glVertex2f(-1.0f, -1.0f);
+    glEnd();
+}
+
+// Dibujar indicador de selección
+void drawSelectionIndicator(float x, float y) {
+    glColor3f(0.8f, 0.4f, 0.1f);
+
+    // Forma de ancla más elaborada
+    glBegin(GL_TRIANGLES);
+    // Punta del ancla
+    glVertex2f(x, y);
+
+    // Base del ancla
+    glVertex2f(x - 0.04f, y + 0.05f);
+    glVertex2f(x + 0.04f, y + 0.05f);
+
+    // Línea horizontal del ancla
+    glVertex2f(x - 0.02f, y + 0.05f);
+    glVertex2f(x + 0.02f, y + 0.05f);
+    glVertex2f(x, y + 0.07f);
+    glEnd();
+}
+
+void drawMenu() {
+    glClearColor(0.63f, 0.32f, 0.18f, 1.0f);  // Color base de madera (#804d26)
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    drawPirateBackground();
+    drawTitle("CONQUER & WIN!", -0.3f, 0.5f);
+
+    const char* newGameText = "Nueva Aventura";
+    const char* loadGameText = "Cargar Juego";
+    const char* exitText = "Abandonar Barco!";
+
+    glColor3f(0.8f, 0.7f, 0.5f);
+
+    // Coordenadas centralizadas para las opciones de menú
+    float menuCenterX = -0.2f;
+    float menuStartY = 0.2f;
+    float menuSpacing = -0.15f;
+
+    renderText(newGameText, menuCenterX, menuStartY, GLUT_BITMAP_HELVETICA_18);
+    renderText(loadGameText, menuCenterX, menuStartY + menuSpacing, GLUT_BITMAP_HELVETICA_18);
+    renderText(exitText, menuCenterX, menuStartY + 2 * menuSpacing, GLUT_BITMAP_HELVETICA_18);
+
+    if (selectedOption == 0) {
+        drawSelectionIndicator(menuCenterX - 0.1f, menuStartY);
+        glColor3f(1.0f, 1.0f, 0.8f);
+        renderText(newGameText, menuCenterX, menuStartY, GLUT_BITMAP_HELVETICA_18);
+    }
+    else if (selectedOption == 1) {
+        drawSelectionIndicator(menuCenterX - 0.1f, menuStartY + menuSpacing);
+        glColor3f(1.0f, 1.0f, 0.8f);
+        renderText(loadGameText, menuCenterX, menuStartY + menuSpacing, GLUT_BITMAP_HELVETICA_18);
+    }
+    else if (selectedOption == 2) {
+        drawSelectionIndicator(menuCenterX - 0.1f, menuStartY + 2 * menuSpacing);
+        glColor3f(1.0f, 1.0f, 0.8f);
+        renderText(exitText, menuCenterX, menuStartY + 2 * menuSpacing, GLUT_BITMAP_HELVETICA_18);
+    }
+    glutSwapBuffers();
+}
+
+void menuKeyboard(unsigned char key, int x, int y) {
+    switch (key) {
+    case 'w':
+    case 'W':
+        if (selectedOption > 0) {
+            selectedOption--;
+        }
+        glutPostRedisplay();
+        break;
+
+    case 's':  // Mover hacia abajo
+    case 'S':
+        if (selectedOption < 2) {
+            selectedOption++;
+        }
+        glutPostRedisplay();
+        break;
+
+    case 13:  // Enter
+        if (selectedOption == 0) {  // Nuevo Juego
+            gameStarted = 1;
+            glutDestroyWindow(window0);  // Cerrar la ventana del menú
+            createWindow1();
+            createWindow2();
+        }
+        else if (selectedOption == 1) {  // Cargar Juego
+            printf("Cargar juego... (Funcionalidad pendiente)\n");
+        }
+        else if (selectedOption == 2) {  // Salir
+            exit(0);
+        }
+        break;
+
+    default:
+        break;
+    }
+}
+
+void initMenuWindow() {
+    glClearColor(0.0, 0.0, 0.0, 1.0);  // Fondo negro
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    gluOrtho2D(-1.0, 1.0, -1.0, 1.0);
+    glMatrixMode(GL_MODELVIEW);
+}
+
+void createMenuWindow() {
+    glutInitWindowSize(700, 700);
+    glutInitWindowPosition(230, 50);
+    window0 = glutCreateWindow("Conquer & Win!");
+    initMenuWindow();
+    glutKeyboardFunc(menuKeyboard);
+    glutDisplayFunc(drawMenu);
 }
 
 // Inventario 
@@ -267,14 +433,12 @@ void insertarNodo(Nodo** Lista, int id, ItemType type) {
     }
 }
 
-
 // Ventanas
-void display() {
-    glutSetWindow(1);
-    renderWindow1();
-
-    glutSetWindow(2);
-    renderWindow2();
+void reshapeWindow(int w, int h) {
+    glViewport(0, 0, w, h);
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    gluOrtho2D(-1.0, 1.0, -1.0, 1.0);
 }
 
 void keyboard(unsigned char key, int x, int y) {
@@ -340,7 +504,7 @@ void keyboard(unsigned char key, int x, int y) {
     glutPostRedisplay();
 }
 
-// Temporizador para movimiento suave
+// Ventana 1
 void timer1(int value) {
     if (pirate.direction != DIRECTION_NONE) {
         float newX = pirate.x;
@@ -402,15 +566,6 @@ void timer1(int value) {
     glutTimerFunc(16, timer1, 0);
 }
 
-
-void reshapeWindow(int w, int h) {
-    glViewport(0, 0, w, h);
-    glMatrixMode(GL_PROJECTION);
-    glLoadIdentity();
-    gluOrtho2D(-1.0, 1.0, -1.0, 1.0);
-}
-
-// Ventana 1
 void renderWindow1() {
     glClear(GL_COLOR_BUFFER_BIT);
     glMatrixMode(GL_MODELVIEW);
@@ -440,7 +595,6 @@ void renderWindow1() {
 
     glutSwapBuffers();
 }
-
 
 void initWindow1() {
     glClearColor(0.549f, 0.835f, 0.953f, 1.0f);
@@ -485,33 +639,6 @@ void timer2(int value) {
     glutTimerFunc(100, timer2, 0);  // Mantener la llamada recursiva
 }
 
-void drawItemWithCount(float x, float y, const char* itemName, int count) {
-    // Dibuja el objeto en la posición especificada
-    if (strcmp(itemName, "Chest") == 0) {
-        drawTreasureChest(x, y);
-    }
-    else if (strcmp(itemName, "Grape") == 0) {
-        drawGrapes(x, y);
-    }
-    else if (strcmp(itemName, "Necklace") == 0) {
-        drawGoldNecklace(x, y);
-    }
-
-    // Configura el color para el texto
-    glColor3f(1.0f, 1.0f, 1.0f);
-
-    // Prepara la posición del texto (ligeramente sobre el objeto)
-    glRasterPos2f(x + 0.4f, y + 0.15f);
-
-    // Convierte el conteo a cadena
-    char countText[10];  // Buffer para el texto
-    sprintf(countText, "%d", count);
-
-    // Renderiza cada carácter de la cadena
-    for (char* c = countText; *c != '\0'; c++) {
-        glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, *c);
-    }
-}
 
 void renderWindow2() {
     glClear(GL_COLOR_BUFFER_BIT);
@@ -560,6 +687,54 @@ void renderWindow2() {
     glutSwapBuffers();
 }
 
+void initWindow2() {
+    glClearColor(0.5f, 0.3f, 0.15f, 1.0f);
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    gluOrtho2D(0.0, 6.0, 0.0, 14.0);
+    glMatrixMode(GL_MODELVIEW);
+
+}
+
+void createWindow2() {
+    glutInitWindowSize(300, 700);
+    glutInitWindowPosition(1000, 50);
+    window2 = glutCreateWindow("Map and Quest");
+
+    initWindow2();
+    glutTimerFunc(100, timer2, 0);
+    glutDisplayFunc(renderWindow2);
+
+}
+
+// Ventana 2 - Minimapa, Inventario, Misiones
+void drawItemWithCount(float x, float y, const char* itemName, int count) {
+    // Dibuja el objeto en la posición especificada
+    if (strcmp(itemName, "Chest") == 0) {
+        drawTreasureChest(x, y);
+    }
+    else if (strcmp(itemName, "Grape") == 0) {
+        drawGrapes(x, y);
+    }
+    else if (strcmp(itemName, "Necklace") == 0) {
+        drawGoldNecklace(x, y);
+    }
+
+    // Configura el color para el texto
+    glColor3f(1.0f, 1.0f, 1.0f);
+
+    // Prepara la posición del texto (ligeramente sobre el objeto)
+    glRasterPos2f(x + 0.4f, y + 0.15f);
+
+    // Convierte el conteo a cadena
+    char countText[10];  // Buffer para el texto
+    sprintf(countText, "%d", count);
+
+    // Renderiza cada carácter de la cadena
+    for (char* c = countText; *c != '\0'; c++) {
+        glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, *c);
+    }
+}
 
 void drawMissions() {
     // Variables de tamaño del minimapa
@@ -650,7 +825,6 @@ void drawMissions() {
     }
 }
 
-
 void drawInventory() {
     // Variables de tamaño del inventario
     float gridCols = 10;  // Número de columnas
@@ -732,7 +906,6 @@ void drawInventory() {
     }
 }
 
-
 void drawMiniMap() {
     // Variables de tamaño del minimapa
     float gridCols = 10;  // Número de columnas
@@ -789,7 +962,6 @@ void drawMiniMap() {
     glVertex2f(playerXInMiniMap, playerYInMiniMap);
     glEnd();
 
-    // ** Dibujar el cofre en el minimapa como una X **
     if (treasureChestGenerated) {
         float chestXInMiniMap = x1Pos + (treasureChestX / 6.0f) * miniMapWidth;
         float chestYInMiniMap = y1Pos + (treasureChestY / 14.0f) * miniMapHeight;
@@ -826,7 +998,6 @@ void drawMiniMap() {
         glutBitmapCharacter(GLUT_BITMAP_HELVETICA_12, *c);  // Renderiza cada caracter
     }
 }
-
 
 void drawSubGrid2() {
     glColor3f(1.0f, 1.0f, 1.0f); // Color blanco para el subgrid
@@ -868,8 +1039,6 @@ void drawSubGrid2() {
     glVertex2f(rightX, subgridStartY * rowHeight); // Punto inferior derecho
     glVertex2f(rightX, (subgridEndY + 1) * rowHeight); // Punto superior derecho
 
-
-
     glEnd();
 }
 
@@ -896,34 +1065,10 @@ void drawGrid2() {
         glVertex2f(0.0f, y); // Punto izquierdo
         glVertex2f(6.0f, y); // Punto derecho
     }
-
     glEnd();
 }
 
-
-void initWindow2() {
-    glClearColor(0.5f, 0.3f, 0.15f, 1.0f);
-    glMatrixMode(GL_PROJECTION);
-    glLoadIdentity();
-    gluOrtho2D(0.0, 6.0, 0.0, 14.0);
-    glMatrixMode(GL_MODELVIEW);
-
-}
-
-void createWindow2() {
-    glutInitWindowSize(300, 700);
-    glutInitWindowPosition(1000, 50);
-    window2 = glutCreateWindow("Map and Quest");
-
-    initWindow2();
-    glutTimerFunc(100, timer2, 0);
-    glutDisplayFunc(renderWindow2);
-
-}
-
-
 // Mapa
-
 void fillGrid() {
     glColor3f(255.0f / 255.0f, 226.0f / 255.0f, 164.0f / 255.0f);
     // Dibuja el cuadrado
@@ -948,8 +1093,8 @@ void fillGrid() {
     glVertex3f(0.0f, 10.0f, 0.0f);  // Esquina superior izquierda
     glEnd();
 }
-// Plano cartesiano
 
+// Plano cartesiano
 void drawText(const char* text, float x, float y) {
     glPushMatrix();
     glRasterPos2f(x, y);
@@ -1074,6 +1219,7 @@ void adjustCameraToFollowPirate() {
     gluOrtho2D(orthoLeft, orthoRight, orthoBottom, orthoTop);
 }
 
+// Dibujado de objetos
 void generateGoldNecklace(float* necklaceX, float* necklaceY) {
     float x, y;
     do {
@@ -1086,7 +1232,6 @@ void generateGoldNecklace(float* necklaceX, float* necklaceY) {
     *necklaceX = x;  // Asignar la posición de X al collar
     *necklaceY = y;  // Asignar la posición de Y al collar
 }
-
 
 void drawGoldNecklace(float necklaceX, float necklaceY) {
     // Color dorado para el collar
@@ -1126,8 +1271,6 @@ void drawGoldNecklace(float necklaceX, float necklaceY) {
     glVertex3f(crossAttachX + 0.05f, crossAttachY - 0.05f, 0.0f);
     glEnd();
 }
-
-
 
 void generateGrapes(float* grapeX, float* grapeY) {
     float x, y;
@@ -1310,29 +1453,6 @@ void renderPalms() {
     }
 }
 
-// Función para verificar si hay colisión entre el pirata y el cofre
-bool checkChestCollision(float pirateX, float pirateY) {
-    float chestRadius = 0.7f;  // Radio del cofre (la mitad del tamaño de la base)
-    float distance = sqrt(pow(pirateX - treasureChestX, 2) + pow(pirateY - treasureChestY, 2));
-
-    return distance < chestRadius;  // Retorna verdadero si el pirata está cerca del cofre
-}
-
-bool checkGrapeCollision(float pirateX, float pirateY) {
-    float grapeRadius = 0.4f;  // Radio del cofre (la mitad del tamaño de la base)
-    float distance = sqrt(pow(pirateX - grapeInitX, 2) + pow(pirateY - grapeInitY, 2));
-
-    return distance < grapeRadius;  // Retorna verdadero si el pirata está cerca del cofre
-}
-
-
-bool checkNecklaceCollision(float pirateX, float pirateY) {
-    float necklaceRadius = 0.5f;  // Radio del cofre (la mitad del tamaño de la base)
-    float distance = sqrt(pow(pirateX - necklaceX, 2) + pow(pirateY - necklaceY, 2));
-
-    return distance < necklaceRadius;  // Retorna verdadero si el pirata está cerca del cofre
-}
-
 void drawTreasureChest(float chestX, float chestY) {
     // *** Base del cofre ***
     glColor3f(0.6f, 0.4f, 0.2f); // Marrón madera
@@ -1378,7 +1498,6 @@ void drawTreasureChest(float chestX, float chestY) {
     glEnd();
 }
 
-
 void generateTreasureChest(float* chestX, float* chestY) {
     float x, y;
     do {
@@ -1391,8 +1510,6 @@ void generateTreasureChest(float* chestX, float* chestY) {
     *chestX = x;
     *chestY = y;
 }
-
-
 
 void drawPirate() {
     // *** Botas ***
@@ -1496,4 +1613,28 @@ void printPalmPositions() {
             palmPositions[i].width,
             palmPositions[i].height);
     }
+}
+
+// Colisiones
+// Función para verificar si hay colisión entre el pirata y el cofre
+bool checkChestCollision(float pirateX, float pirateY) {
+    float chestRadius = 0.7f;  // Radio del cofre (la mitad del tamaño de la base)
+    float distance = sqrt(pow(pirateX - treasureChestX, 2) + pow(pirateY - treasureChestY, 2));
+
+    return distance < chestRadius;  // Retorna verdadero si el pirata está cerca del cofre
+}
+
+bool checkGrapeCollision(float pirateX, float pirateY) {
+    float grapeRadius = 0.4f;  // Radio del cofre (la mitad del tamaño de la base)
+    float distance = sqrt(pow(pirateX - grapeInitX, 2) + pow(pirateY - grapeInitY, 2));
+
+    return distance < grapeRadius;  // Retorna verdadero si el pirata está cerca del cofre
+}
+
+
+bool checkNecklaceCollision(float pirateX, float pirateY) {
+    float necklaceRadius = 0.5f;  // Radio del cofre (la mitad del tamaño de la base)
+    float distance = sqrt(pow(pirateX - necklaceX, 2) + pow(pirateY - necklaceY, 2));
+
+    return distance < necklaceRadius;  // Retorna verdadero si el pirata está cerca del cofre
 }
