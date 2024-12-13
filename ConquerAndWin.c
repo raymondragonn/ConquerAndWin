@@ -19,7 +19,7 @@ int window0, window1, window2, window3;
 bool gameStateChanged = false;
 
 int timerStarted = 0;
-int remainingTime = 30;
+int remainingTime = 120;
 int lastTimerUpdate = 0;
 
 float zoomLevel = 1.0f; // Nivel de zoom (1.0 es el predeterminado)
@@ -140,6 +140,7 @@ typedef struct {
 Pila pilaMisiones;
 
 // Misiones
+void initMissions();
 void inicializarPila(Pila* pila, int capacidadInicial);
 int estaVacia(Pila* pila);
 void expandirPila(Pila* pila);
@@ -151,6 +152,7 @@ void liberarPila(Pila* pila);
 // Inventario
 Nodo* crearNodo(int count);
 void insertarNodo(Nodo** Lista, int id, ItemType type);
+void liberarLista(Nodo** Lista);
 
 // Dibujado de objetos
 void generateGoldNecklace(float* necklaceX, float* necklaceY);
@@ -227,22 +229,21 @@ void timer2(int value);
 void renderWindow2();
 void createWindow2();
 
+// Timer
+void updateGameTimer(int value);
+
 int main(int argc, char** argv) {
     glutInit(&argc, argv);
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB);
 
-    inicializarPila(&pilaMisiones, 3);
-    Mision m1 = { "Mision 1", "Agarra 4 uvas" };
-    Mision m3 = { "Mision 3", "Consigue 15 cofres" };
-    Mision m2 = { "Mision 2", "Encuentra 2 collares" };
-
-    agregarMision(&pilaMisiones, m3);
-    agregarMision(&pilaMisiones, m2);
-    agregarMision(&pilaMisiones, m1);
+    initMissions();
 
     createMenuWindow();  // Crear la ventana del menú
     glutTimerFunc(16, timer0, 0);
     glutMainLoop();  // Bucle principal de GLUT
+
+    liberarPila(&pilaMisiones);
+    liberarLista(&Inventory);
     return 0;
 }
 
@@ -311,8 +312,12 @@ void gameOverKeyboard(unsigned char key, int x, int y) {
             glutDestroyWindow(window3);  // Cerrar la ventana de "Juego Terminado"
             createMenuWindow();  // Crear la ventana del menú principal
             timerStarted = 0;
-            remainingTime = 30;
+            remainingTime = 120;
             lastTimerUpdate = 0;
+            liberarPila(&pilaMisiones);
+            initMissions();
+            liberarLista(&Inventory);
+
         }
         else if (selectedOption3 == 1) {  // Guardar
             printf("Juego Guardado... (Funcionalidad pendiente)\n");
@@ -463,8 +468,8 @@ void menuKeyboard(unsigned char key, int x, int y) {
         if (selectedOption == 0) {  // Nuevo Juego
             gameStarted = 1;
             glutDestroyWindow(window0);  // Cerrar la ventana del menú
-            createWindow1();
             createWindow2();
+            createWindow1();
         }
         else if (selectedOption == 1) {  // Cargar Juego
             printf("Cargar juego... (Funcionalidad pendiente)\n");
@@ -566,6 +571,20 @@ void insertarNodo(Nodo** Lista, int id, ItemType type) {
     }
 }
 
+void liberarLista(Nodo** Lista) {
+    Nodo* current = *Lista;
+    Nodo* next;
+
+    while (current != NULL) {
+        next = current->sgt;
+        free(current);
+        current = next;
+    }
+
+    *Lista = NULL;
+}
+
+
 // Ventanas
 void reshapeWindow(int w, int h) {
     glViewport(0, 0, w, h);
@@ -653,7 +672,6 @@ void updateGameTimer(int value) {
         lastTimerUpdate = currentTime;
 
         if (remainingTime <= 0) {
-            // Time is up, create Game Over window
             glutDestroyWindow(window1);
             createGameOverWindow();
             glutDisplayFunc(drawGameOverWindow);
@@ -774,11 +792,14 @@ void renderWindow1() {
         char timeStr[20];
         sprintf(timeStr, "Time: %d:%02d", remainingTime / 60, remainingTime % 60);
 
-        glColor3f(1.0f, 1.0f, 1.0f);  // White color
-        glRasterPos2f(-0.5f, 1.0f);  // Position at top left
+        glColor3f(0.0f, 0.0f, 0.0f);  // Black color
+        glRasterPos2f(8.0f, 10.5f);  // Position at top left corner of the map
+
+        glPushMatrix();
         for (int i = 0; timeStr[i] != '\0'; i++) {
             glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, timeStr[i]);
         }
+        glPopMatrix();
     }
 
     glutSwapBuffers();
@@ -1369,29 +1390,61 @@ void drawGrid2() {
 
 // Mapa
 void fillGrid() {
-    glColor3f(255.0f / 255.0f, 226.0f / 255.0f, 164.0f / 255.0f);
-    // Dibuja el cuadrado
+    // Guardar estado previo de iluminación 
+    GLboolean lightingEnabled;
+    glGetBooleanv(GL_LIGHTING, &lightingEnabled);
+
+    // Habilitar iluminación
+    glEnable(GL_LIGHTING);
+    glEnable(GL_LIGHT0);
+
+    // Configurar la luz
+    GLfloat luzAmbiente[] = { 0.3f, 0.3f, 0.3f, 1.0f };  // Luz ambiental más suave
+    GLfloat luzDifusa[] = { 0.8f, 0.8f, 0.8f, 1.0f };    // Luz difusa normal
+    GLfloat posicionLuz[] = { -5.0f, 5.0f, 10.0f, 1.0f }; // Luz en Noroeste con un ángulo más bajo
+
+    glLightfv(GL_LIGHT0, GL_AMBIENT, luzAmbiente);
+    glLightfv(GL_LIGHT0, GL_DIFFUSE, luzDifusa);
+    glLightfv(GL_LIGHT0, GL_POSITION, posicionLuz);
+
+    // Material del cuadrado
+    GLfloat materialAmbiente[] = { 255.0f / 255.0f, 226.0f / 255.0f, 164.0f / 255.0f, 1.0f };
+    GLfloat materialDifuso[] = { 255.0f / 255.0f, 226.0f / 255.0f, 164.0f / 255.0f, 1.0f };
+
+    glMaterialfv(GL_FRONT, GL_AMBIENT, materialAmbiente);
+    glMaterialfv(GL_FRONT, GL_DIFFUSE, materialDifuso);
+
+    // Dibujar el cuadrado
     glBegin(GL_QUADS);
-    glVertex3f(0.0f, 0.0f, 0.0f);  // Esquina inferior izquierda
-    glVertex3f(10.0f, 0.0f, 0.0f); // Esquina inferior derecha
-    glVertex3f(10.0f, 10.0f, 0.0f); // Esquina superior derecha
-    glVertex3f(0.0f, 10.0f, 0.0f);  // Esquina superior izquierda
+    glVertex3f(0.0f, 0.0f, 0.0f);  // Esquina inferior izquierda 
+    glVertex3f(10.0f, 0.0f, 0.0f); // Esquina inferior derecha 
+    glVertex3f(10.0f, 10.0f, 0.0f); // Esquina superior derecha 
+    glVertex3f(0.0f, 10.0f, 0.0f);  // Esquina superior izquierda 
     glEnd();
 
-    // Establecer el color del borde (puedes cambiar este color)
-    glColor3f(0.0f, 0.0f, 0.0f); // Negro para el borde
+    // Deshabilitar iluminación para otros elementos (borde u objetos fuera del mapa)
+    glDisable(GL_LIGHTING);
+    glColor3f(0.0f, 0.0f, 0.0f); // Negro para el borde 
 
     // Establecer el grosor de la línea del borde
-    glLineWidth(2.0f); // Grosor del borde
+    glLineWidth(2.0f); // Grosor del borde 
 
-    // Dibuja el borde (cuadrado con líneas)
+    // Dibujar el borde (cuadrado con líneas)
     glBegin(GL_LINE_LOOP);
-    glVertex3f(0.0f, 0.0f, 0.0f);  // Esquina inferior izquierda
-    glVertex3f(10.0f, 0.0f, 0.0f); // Esquina inferior derecha
-    glVertex3f(10.0f, 10.0f, 0.0f); // Esquina superior derecha
-    glVertex3f(0.0f, 10.0f, 0.0f);  // Esquina superior izquierda
+    glVertex3f(0.0f, 0.0f, 0.0f);  // Esquina inferior izquierda 
+    glVertex3f(10.0f, 0.0f, 0.0f); // Esquina inferior derecha 
+    glVertex3f(10.0f, 10.0f, 0.0f); // Esquina superior derecha 
+    glVertex3f(0.0f, 10.0f, 0.0f);  // Esquina superior izquierda 
     glEnd();
+
+    // Restaurar estado previo de iluminación 
+    if (lightingEnabled) {
+        glEnable(GL_LIGHTING);
+    }
 }
+
+
+
 
 // Plano cartesiano
 void drawText(const char* text, float x, float y) {
@@ -1939,6 +1992,7 @@ bool checkNecklaceCollision(float pirateX, float pirateY) {
 }
 
 // Misiones
+
 // Función para inicializar la pila
 void inicializarPila(Pila* pila, int capacidadInicial) {
     pila->misiones = (Mision*)malloc(sizeof(Mision) * capacidadInicial);
@@ -1993,4 +2047,15 @@ Mision verMisionSuperior(Pila* pila) {
 // Función para liberar la memoria de la pila
 void liberarPila(Pila* pila) {
     free(pila->misiones);
+}
+
+void initMissions() {
+    inicializarPila(&pilaMisiones, 3);
+    Mision m1 = { "Mision 1", "Agarra 4 uvas" };
+    Mision m3 = { "Mision 3", "Consigue 15 cofres" };
+    Mision m2 = { "Mision 2", "Encuentra 2 collares" };
+
+    agregarMision(&pilaMisiones, m3);
+    agregarMision(&pilaMisiones, m2);
+    agregarMision(&pilaMisiones, m1);
 }
