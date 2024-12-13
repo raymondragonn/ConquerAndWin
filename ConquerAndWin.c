@@ -13,9 +13,14 @@
 #define DIRECTION_NONE -1
 
 int selectedOption = 0;  // 0: Nuevo Juego, 1: Cargar Juego, 2: Salir
+int selectedOption3 = 0;   // Opción seleccionada en la ventana "Juego Terminado" 
 int gameStarted = 0;  // Variable para determinar si el juego ha comenzado
-int window0, window1, window2;
+int window0, window1, window2, window3;
 bool gameStateChanged = false;
+
+int timerStarted = 0;
+int remainingTime = 30;
+int lastTimerUpdate = 0;
 
 float zoomLevel = 1.0f; // Nivel de zoom (1.0 es el predeterminado)
 float orthoLeft = -1.0f, orthoRight = 11.0f, orthoBottom = -1.0f, orthoTop = 11.0f;
@@ -29,14 +34,17 @@ bool palmsGenerated = false;
 float treasureChestX = -1.0f, treasureChestY = -1.0f; // Posición inicial de carga (Inválida)
 bool treasureChestGenerated = false;  // Bandera para creación de Cofre
 bool showChest = false; // Bandera para indicar si se muestra el cofre
+int totalChestInMission = 10;
 
 float grapeInitX = -1.0f, grapeInitY = -1.0f;
 bool grapeGenerated = false;
 bool showGrape = false;
+int totalGrapeInMission = 4;
 
 float necklaceX = -1.0f, necklaceY = -1.0f;
 bool necklaceGenerated = false;
 bool showNecklace = false;
+int totalNecklaceInMission = 2;
 
 typedef struct {
     float r, g, b;
@@ -225,17 +233,118 @@ int main(int argc, char** argv) {
 
     inicializarPila(&pilaMisiones, 3);
     Mision m1 = { "Mision 1", "Agarra 4 uvas" };
-    Mision m2 = { "Mision 2", "Encuentra 2 collares" };
     Mision m3 = { "Mision 3", "Consigue 15 cofres" };
+    Mision m2 = { "Mision 2", "Encuentra 2 collares" };
 
-    agregarMision(&pilaMisiones, m1);
-    agregarMision(&pilaMisiones, m2);
     agregarMision(&pilaMisiones, m3);
+    agregarMision(&pilaMisiones, m2);
+    agregarMision(&pilaMisiones, m1);
 
     createMenuWindow();  // Crear la ventana del menú
     glutTimerFunc(16, timer0, 0);
     glutMainLoop();  // Bucle principal de GLUT
     return 0;
+}
+
+// Función para dibujar la ventana "Juego Terminado"
+void drawGameOverWindow() {
+    glClearColor(0.63f, 0.32f, 0.18f, 1.0f);  // Color base de madera (#804d26)
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    drawPirateBackground();  // Fondo similar al menú principal
+    drawTitle("¡Juego Terminado!", -0.3f, 0.5f);
+
+    const char* mainMenuText = "Volver al Menu Principal";
+    const char* saveText = "Guardar";
+    const char* exitText = "Salir";
+
+    glColor3f(0.8f, 0.7f, 0.5f);
+
+    // Coordenadas centralizadas para las opciones
+    float menuCenterX = -0.3f;
+    float menuStartY = 0.2f;
+    float menuSpacing = -0.15f;
+
+    renderText(mainMenuText, menuCenterX, menuStartY, GLUT_BITMAP_HELVETICA_18);
+    renderText(saveText, menuCenterX, menuStartY + menuSpacing, GLUT_BITMAP_HELVETICA_18);
+    renderText(exitText, menuCenterX, menuStartY + 2 * menuSpacing, GLUT_BITMAP_HELVETICA_18);
+
+    if (selectedOption3 == 0) {
+        drawSelectionIndicator(menuCenterX - 0.1f, menuStartY);
+        glColor3f(1.0f, 1.0f, 0.8f);
+        renderText(mainMenuText, menuCenterX, menuStartY, GLUT_BITMAP_HELVETICA_18);
+    }
+    else if (selectedOption3 == 1) {
+        drawSelectionIndicator(menuCenterX - 0.1f, menuStartY + menuSpacing);
+        glColor3f(1.0f, 1.0f, 0.8f);
+        renderText(saveText, menuCenterX, menuStartY + menuSpacing, GLUT_BITMAP_HELVETICA_18);
+    }
+    else if (selectedOption3 == 2) {
+        drawSelectionIndicator(menuCenterX - 0.1f, menuStartY + 2 * menuSpacing);
+        glColor3f(1.0f, 1.0f, 0.8f);
+        renderText(exitText, menuCenterX, menuStartY + 2 * menuSpacing, GLUT_BITMAP_HELVETICA_18);
+    }
+    glutSwapBuffers();
+}
+
+// Función de teclado para manejar las opciones en la ventana "Juego Terminado"
+void gameOverKeyboard(unsigned char key, int x, int y) {
+    switch (key) {
+    case 'w':
+    case 'W':
+        if (selectedOption3 > 0) {
+            selectedOption3--;
+        }
+        glutPostRedisplay();
+        break;
+
+    case 's':
+    case 'S':
+        if (selectedOption3 < 2) {
+            selectedOption3++;
+        }
+        glutPostRedisplay();
+        break;
+
+    case 13:  // Enter
+        if (selectedOption3 == 0) {  // Volver al Menú Principal
+            glutDestroyWindow(window3);  // Cerrar la ventana de "Juego Terminado"
+            createMenuWindow();  // Crear la ventana del menú principal
+            timerStarted = 0;
+            remainingTime = 30;
+            lastTimerUpdate = 0;
+        }
+        else if (selectedOption3 == 1) {  // Guardar
+            printf("Juego Guardado... (Funcionalidad pendiente)\n");
+            // Lógica para guardar el estado del juego
+        }
+        else if (selectedOption3 == 2) {  // Salir
+            exit(0);  // Salir del programa
+        }
+        break;
+
+    default:
+        break;
+    }
+}
+
+// Función para inicializar la ventana "Juego Terminado"
+void initGameOverWindow() {
+    glClearColor(0.0, 0.0, 0.0, 1.0);  // Fondo negro
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    gluOrtho2D(-1.0, 1.0, -1.0, 1.0);
+    glMatrixMode(GL_MODELVIEW);
+}
+
+// Función para crear la ventana "Juego Terminado"
+void createGameOverWindow() {
+    glutInitWindowSize(700, 700);
+    glutInitWindowPosition(230, 50);
+    window3 = glutCreateWindow("Juego Terminado");
+    initGameOverWindow();
+    glutKeyboardFunc(gameOverKeyboard);
+    glutDisplayFunc(drawGameOverWindow);
 }
 
 void timer0(int value) {
@@ -466,6 +575,12 @@ void reshapeWindow(int w, int h) {
 }
 
 void keyboard(unsigned char key, int x, int y) {
+    if (!timerStarted && (key == 'w' || key == 'W' || key == 's' || key == 'S' ||
+        key == 'a' || key == 'A' || key == 'd' || key == 'D')) {
+        timerStarted = 1;
+        lastTimerUpdate = glutGet(GLUT_ELAPSED_TIME);
+    }
+
     float newX = pirate.x;
     float newY = pirate.y;
 
@@ -529,6 +644,28 @@ void keyboard(unsigned char key, int x, int y) {
 }
 
 // Ventana 1
+void updateGameTimer(int value) {
+    if (timerStarted) {
+        int currentTime = glutGet(GLUT_ELAPSED_TIME);
+        int elapsedSeconds = (currentTime - lastTimerUpdate) / 1000;
+
+        remainingTime -= elapsedSeconds;
+        lastTimerUpdate = currentTime;
+
+        if (remainingTime <= 0) {
+            // Time is up, create Game Over window
+            glutDestroyWindow(window1);
+            createGameOverWindow();
+            glutDisplayFunc(drawGameOverWindow);
+            timerStarted = 0;
+            return;
+        }
+    }
+
+    // Continue the timer
+    glutTimerFunc(1000, updateGameTimer, 0);
+}
+
 void timer1(int value) {
     if (pirate.direction != DIRECTION_NONE) {
         float newX = pirate.x;
@@ -561,16 +698,32 @@ void timer1(int value) {
         if (checkChestCollision(pirate.x, pirate.y)) {
             generateTreasureChest(&treasureChestX, &treasureChestY);
             insertarNodo(&Inventory, c, ITEM_CHEST); // Inserta un cofre
+            if (totalGrapeInMission == 0 && totalNecklaceInMission == 0) {
+                --totalChestInMission;
+                if (totalChestInMission == 0) {
+                    eliminarMision(&pilaMisiones);
+                }
+            }
         }
 
         if (checkGrapeCollision(pirate.x, pirate.y)) {
             generateGrapes(&grapeInitX, &grapeInitY);
             insertarNodo(&Inventory, c, ITEM_GRAPE); // Inserta uvas
+            --totalGrapeInMission;
+            if (totalGrapeInMission == 0) {
+                eliminarMision(&pilaMisiones);
+            }
         }
 
         if (checkNecklaceCollision(pirate.x, pirate.y)) {
             generateGoldNecklace(&necklaceX, &necklaceY);
             insertarNodo(&Inventory, c, ITEM_NECKLACE);
+            if (totalGrapeInMission == 0) {
+                --totalNecklaceInMission;
+                if (totalNecklaceInMission == 0) {
+                    eliminarMision(&pilaMisiones);
+                }
+            }
         }
 
     }
@@ -617,6 +770,17 @@ void renderWindow1() {
     drawGrapes(grapeInitX, grapeInitY);
     drawGoldNecklace(necklaceX, necklaceY);
 
+    if (timerStarted) {
+        char timeStr[20];
+        sprintf(timeStr, "Time: %d:%02d", remainingTime / 60, remainingTime % 60);
+
+        glColor3f(1.0f, 1.0f, 1.0f);  // White color
+        glRasterPos2f(-0.5f, 1.0f);  // Position at top left
+        for (int i = 0; timeStr[i] != '\0'; i++) {
+            glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, timeStr[i]);
+        }
+    }
+
     glutSwapBuffers();
 }
 
@@ -643,6 +807,8 @@ void createWindow1() {
     initWindow1(); // Inicializar el juego
     glutKeyboardFunc(keyboard); // Manejar las entradas del teclado
 
+    // Add this line to start the timer update
+    glutTimerFunc(1000, updateGameTimer, 0);
 
     glutTimerFunc(16, timer1, 0);
     glutDisplayFunc(renderWindow1);
@@ -811,10 +977,10 @@ void drawMissions(Pila* pila) {
     float missionWidth = (x3Pos - x1Pos) / numColumns;  // Ancho de cada misión
     float missionHeight = (y3Pos - y1Pos) / (float)(numMissions);  // Altura de cada misión
 
-    // Dibujar las misiones con colores personalizados para cada fila
-    for (int i = 0; i < numMissions; i++) {
-        int row = i / numColumns;  // Determinar la fila (0, 1, 2)
-        int col = i % numColumns;  // Determinar la columna (0, 1)
+    // Recorrer la pila de abajo hacia arriba, es decir, desde el tope hacia el fondo
+    for (int i = pila->tope; i >= 0; i--) {
+        int row = (pila->tope - i) / numColumns;  // Determinar la fila (de abajo hacia arriba)
+        int col = (pila->tope - i) % numColumns;  // Determinar la columna (si hay más de una)
 
         // Calcular la posición de cada misión
         float missionX1 = x1Pos + col * missionWidth;  // Posición X de la misión
